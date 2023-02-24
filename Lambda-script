@@ -1,0 +1,91 @@
+import json
+import os
+import boto3
+import json
+import requests
+from datetime import datetime, timedelta, date
+
+
+TEAMS_WEBHOOK_URL = os.environ["WEB_HOOK"]
+#ログインしていない日数
+PERIOD  = 90
+#Teamsメッセージタイトル
+TITLE = "最近使用していないユーザ情報"
+
+def lambda_handler(event, context) -> None:
+    client = boto3.client('iam', region_name='ap-northeast-1')
+    # 認証情報レポートを生成、取得
+    response = client.generate_credential_report()
+    report = client.get_credential_report()
+
+    #レポート情報の整形
+    organized_data = organize_data(report)
+    #情報から最終ログイン時よりPERIOD日以上経過しているユーザ情報を取得
+    not_login_users = get_notloginuser_infomation(organized_data)
+    # Teams用のメッセージを作成、投稿
+    subtitle = create_subtitle(not_login_users)
+    post_to_teams(TITLE,subtitle, not_login_users)
+
+def create_subtitle(results: list) -> str :
+    if len(results) == 0:
+        subtitle = str(PERIOD)+"日以上ログインしていないIAMユーザはありません。"
+    else:
+        subtitle = str(PERIOD)+"日以上ログインしていないIAMユーザは以下です。\n ※ユーザ名の右側に記載されている期間は最終ログイン日から本日までの日数を示しています。"
+    return subtitle
+    
+def get_notloginuser_infomation(split_contents: dict) -> list:
+    
+   not_login_user = []
+
+   for record in split_contents :
+        split_record = record.split(",")
+        if(split_record[5]=='N/A'):
+            continue
+        now = date.today()
+        #認証情報レポート[password_last_used]列を取得
+        last_login_time = datetime.fromisoformat(split_record[4])
+        last_login_time = last_login_time.date()
+        diff = abs(now - last_login_time)
+        if(diff > timedelta(days = PERIOD)):
+           tmp = {"name":split_record[0],"value":(str(diff.days) + "日")}
+           not_login_user.append(tmp)
+   return not_login_user
+
+def organize_data(report:dict) -> dict:
+   #取得した情報の整形
+   contents = report["Content"].decode("utf-8", "ignore")
+   split_contents = contents.split("\n")
+   #見出し/root_userの行を削除
+   split_contents = split_contents[2:]
+   return split_contents
+    
+def post_to_teams(title: str,subtitle: str,facts: list) -> None:
+
+    payload = {
+        '@type': 'MessageCard',
+        "@context": "http://schema.org/extensions",
+        "themeColor": "0076D7",
+        "summary": title,
+        "sections": [{
+            "activityTitle": title,
+            "activitySubtitle": subtitle,
+            "activityImage": "https://img.icons8.com/color/50/000000/amazon-web-services.png",
+            "facts": facts,
+            "markdown": 'true',
+            "potentialAction": [{
+                "@type": "OpenUri",
+                "name": "Credential Infomation Report",
+                "targets": [{
+                    "os": "default",
+                    "uri": "https://us-east-1.console.aws.amazon.com/iamv2/home?region=ap-northeast-1#/credential_report"
+                }]
+            }]
+        }]
+    }
+
+    try:
+        response = requests.post(TEAMS_WEBHOOK_URL, data=json.dumps(payload))
+    except requests.exceptions.RequestException as e:
+        print(e)
+    else:
+        print(response.status_code)
