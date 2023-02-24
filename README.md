@@ -1,7 +1,7 @@
 <img src = "https://img.shields.io/badge/Python-3.9-informational.svg?logo=python">
 
 # 概要
-しばらく使われていないIAMユーザの情報をteamsへ通知するためのAWS Lambdaスクリプト
+しばらく使われていないIAMユーザの情報をTeamsへ通知するためのAWS Lambdaスクリプト
 です。  
 
 # 環境
