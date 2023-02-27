@@ -10,4 +10,4 @@
 * AWS Event Bridge
 
 # 使い方
-　こちらのブログをご参照ください。
+　[こちら](https://cloud.bigtreetc.com/column/post-not-using-iamuser-information-to-teams/)のブログをご参照ください。
